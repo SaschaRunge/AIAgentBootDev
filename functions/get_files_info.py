@@ -12,10 +12,10 @@ def get_files_info(working_directory, directory="."):
     result = ""
 
     try:
-        dir_entries = os.scandir(path)
-        for dir_entry in dir_entries:
-            result += f"- {dir_entry.name}: file_size={dir_entry.stat().st_size} bytes, is_dir={dir_entry.is_dir()}\n"    
-        return result
+        with os.scandir(path) as dir_entries:
+            for dir_entry in dir_entries:
+                result += f"- {dir_entry.name}: file_size={dir_entry.stat().st_size} bytes, is_dir={dir_entry.is_dir()}\n"    
+            return result
     except Exception as e:
         return f"Error: {directory} not found or inaccessible"
 
