@@ -19,9 +19,9 @@ def handle_arguments(args):
     user_prompt = ""
     options = []
     for arg in args[1:]:
-        if user_prompt == "" and not starts_with(arg, "--"):
+        if user_prompt == "" and not arg.startswith("--"):
             user_prompt = arg
-        elif starts_with(arg, "--"):
+        elif arg.startswith("--"):
             options.append(arg)
         else:
             handle_invalid_arguments()
@@ -31,34 +31,37 @@ def handle_arguments(args):
 def handle_invalid_arguments():
         print("Error: Usage is main.py 'prompt' optional-arguments.")
         print(
-                "Valid arguments:\n" +
-                "   --verbose"
+                "Valid arguments:\n"
+                "   --verbose : outputs user prompt and token usage to console\n"
+                "   --bypass : bypasses llm-usage (avoids using tokens while testing)"
             )
         sys.exit(1)
-        
-def starts_with(string, starting_characters):
-    if(len(string) <= len(starting_characters)):
-        return False
-    else:
-        return string[:2] == starting_characters
-    
+            
 def call_llm(client, user_prompt, *args):
     messages = [
         types.Content(role="user", parts=[types.Part(text=user_prompt)]),
     ]
 
-    response = client.models.generate_content(model='gemini-2.0-flash-001', contents=messages)
+    if "--bypass" not in args:
+        response = client.models.generate_content(model='gemini-2.0-flash-001', contents=messages)
+        prompt_token_count = response.usage_metadata.prompt_token_count
+        candidates_token_count = response.usage_metadata.candidates_token_count
+        response_text = response.text
+    else:
+        response_text = "test-response"
+        prompt_token_count = 0
+        candidates_token_count = 0
 
-    if ("--verbose" in args):
+    if "--verbose" in args:
         print(
             "\n\n\n"
             f"User prompt: {user_prompt}\n"
-            f"Prompt tokens: {response.usage_metadata.prompt_token_count}\n"
-            f"Response tokens: {response.usage_metadata.candidates_token_count}"
+            f"Prompt tokens: {prompt_token_count}\n"
+            f"Response tokens: {candidates_token_count}"
         )
 
     print(f"\n\n")
-    print(response.text)
+    print(response_text)
     
     
     
