@@ -54,20 +54,14 @@ def call_llm(client, user_prompt, *args):
 
     if "--verbose" in args:
         print(
-            "\n\n\n"
             f"User prompt: {user_prompt}\n"
             f"Prompt tokens: {prompt_token_count}\n"
             f"Response tokens: {candidates_token_count}"
         )
 
-    print(f"\n\n")
+
     print(response_text)
-    
-    
-    
-
-
-
+      
 
 if __name__ == "__main__":
     main()
