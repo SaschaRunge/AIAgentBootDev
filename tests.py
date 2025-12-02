@@ -4,7 +4,7 @@ from functions.write_file import write_file
 
 def tests():
     #test_get_file_info()
-    #test_get_file_content()
+    test_get_file_content()
     #test_write_file()
     return
 
