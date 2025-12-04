@@ -3,7 +3,12 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from prompts import system_prompt
+from functions.get_file_content import get_file_content
+from functions.get_files_info import get_files_info
+from functions.run_python_file import run_python_file
+from functions.write_file import write_file
 from usage_schemes import schema_get_files_info, schema_get_file_content, schema_get_run_python_file, schema_write_file
+from config import WORKING_DIRECTORY
 
 
 def main():
@@ -53,6 +58,10 @@ def call_llm(client, user_prompt, available_functions, *args):
     messages = [
         types.Content(role="user", parts=[types.Part(text=user_prompt)]),
     ]
+    
+    verbose = False
+    if "--verbose" in args:
+        verbose = True
 
     if "--bypass" not in args:
         response = client.models.generate_content(
@@ -67,16 +76,25 @@ def call_llm(client, user_prompt, available_functions, *args):
         candidates_token_count = response.usage_metadata.candidates_token_count
         response_text = response.text
         response_function_calls = response.function_calls
+
+        function_result_parts = []
         if response_function_calls is not None:
             for function_call in response_function_calls:
-                print(f"Calling function: {function_call.name}({function_call.args})")
-
+                function_call_result = call_function(function_call, verbose)
+                try:
+                    dummy = function_call_result.parts[0].function_response.response
+                    function_result_parts.append(function_call_result.parts[0])
+                    if verbose:
+                        print(f"-> {function_call_result.parts[0].function_response.response}")
+                except Exception as e:
+                    print("Fatal error: function_result.parts[0].function_response.response attribute is missing.")
+                     
     else:
         response_text = "test-response"
         prompt_token_count = 0
         candidates_token_count = 0
 
-    if "--verbose" in args:
+    if verbose:
         print(
             f"User prompt: {user_prompt}\n"
             f"Prompt tokens: {prompt_token_count}\n"
@@ -90,6 +108,36 @@ def call_function(function_call_part, verbose=False):
         print(f"Calling function: {function_call_part.name}({function_call_part.args})")
     else:
         print(f" - Calling function: {function_call_part.name}")
+
+    function_name = {
+        "get_file_content": get_file_content,
+        "get_files_info": get_files_info,
+        "run_python_file": run_python_file,
+        "write_file": write_file
+    }
+
+    try:
+        #function_result = write_file(".", "hello.txt", "test")
+        function_result = function_name[function_call_part.name](WORKING_DIRECTORY, **function_call_part.args)
+        return types.Content(
+            role="tool",
+            parts=[
+                types.Part.from_function_response(
+                    name=function_call_part.name,
+                    response={"result": function_result},
+                )
+            ],
+        )
+    except Exception as e:
+        return types.Content(
+            role="tool",
+            parts=[
+                types.Part.from_function_response(
+                    name=function_call_part.name,
+                    response={"error": f"Unknown function: {function_name}"},
+                )
+            ],
+        )
 
 
 if __name__ == "__main__":
