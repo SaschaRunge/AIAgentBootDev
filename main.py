@@ -64,7 +64,7 @@ def call_llm(client, user_prompt, available_functions, *args):
     
     for i in range(0, AGENT_ITERATIONS):   
         if "--bypass" in args:
-            response_text = "test-response"
+            response_text = ["test-response"]
             prompt_token_count = 0
             candidates_token_count = 0
         else:
@@ -100,10 +100,10 @@ def call_llm(client, user_prompt, available_functions, *args):
                 for function_call in response_function_calls:
                     function_call_result = call_function(function_call, verbose)
                     try:
-                        dummy = function_call_result.parts[0].function_response.response
+                        response_data = function_call_result.parts[0].function_response.response
                         function_result_parts.append(function_call_result.parts[0])
                         if verbose:
-                            print(f"-> {function_call_result.parts[0].function_response.response}")
+                            print(f"-> {response_data}")
                     except Exception as e:
                         raise Exception("Fatal error: function_result.parts[0].function_response.response attribute is missing.")
 
