@@ -79,8 +79,18 @@ def call_llm(client, user_prompt, available_functions, *args):
                 )
                 prompt_token_count = response.usage_metadata.prompt_token_count
                 candidates_token_count = response.usage_metadata.candidates_token_count
-                response_function_calls = response.function_calls
-                response_text = response.text
+
+                text_parts = []
+                function_calls = []
+                for part in response.candidates[0].content.parts:
+                    if part.text:
+                        text_parts.append(part.text)
+                    if part.function_call:
+                        function_calls.append(part.function_call)
+
+                response_text = "".join(text_parts)
+                response_function_calls = function_calls
+
             except Exception as e:
                 response_function_calls = None
                 print(f"Error: Failed to generate agent response with error: {e}")
