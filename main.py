@@ -8,7 +8,7 @@ from functions.get_files_info import get_files_info
 from functions.run_python_file import run_python_file
 from functions.write_file import write_file
 from usage_schemes import schema_get_files_info, schema_get_file_content, schema_get_run_python_file, schema_write_file
-from config import WORKING_DIRECTORY
+from config import WORKING_DIRECTORY, AGENT_ITERATIONS
 
 
 def main():
@@ -58,50 +58,72 @@ def call_llm(client, user_prompt, available_functions, *args):
     messages = [
         types.Content(role="user", parts=[types.Part(text=user_prompt)]),
     ]
-    
     verbose = False
     if "--verbose" in args:
         verbose = True
+    
+    for i in range(0, AGENT_ITERATIONS):   
+        if "--bypass" in args:
+            response_text = "test-response"
+            prompt_token_count = 0
+            candidates_token_count = 0
+        else:
+            try:
+                response = client.models.generate_content(
+                    model='gemini-2.0-flash-001', 
+                    contents=messages,
+                    config=types.GenerateContentConfig(
+                        tools=[available_functions], 
+                        system_instruction=system_prompt
+                        ),
+                )
+                prompt_token_count = response.usage_metadata.prompt_token_count
+                candidates_token_count = response.usage_metadata.candidates_token_count
+                response_function_calls = response.function_calls
+                response_text = response.text
+            except Exception as e:
+                response_function_calls = None
+                print(f"Error: Failed to generate agent response with error: {e}")
 
-    if "--bypass" not in args:
-        response = client.models.generate_content(
-            model='gemini-2.0-flash-001', 
-            contents=messages,
-            config=types.GenerateContentConfig(
-                tools=[available_functions], 
-                system_instruction=system_prompt
-                ),
-        )
-        prompt_token_count = response.usage_metadata.prompt_token_count
-        candidates_token_count = response.usage_metadata.candidates_token_count
-        response_text = response.text
-        response_function_calls = response.function_calls
+            function_result_parts = []
+            if response_function_calls is not None:
+                for function_call in response_function_calls:
+                    function_call_result = call_function(function_call, verbose)
+                    try:
+                        dummy = function_call_result.parts[0].function_response.response
+                        function_result_parts.append(function_call_result.parts[0])
+                        if verbose:
+                            print(f"-> {function_call_result.parts[0].function_response.response}")
+                    except Exception as e:
+                        raise Exception("Fatal error: function_result.parts[0].function_response.response attribute is missing.")
 
-        function_result_parts = []
-        if response_function_calls is not None:
-            for function_call in response_function_calls:
-                function_call_result = call_function(function_call, verbose)
-                try:
-                    dummy = function_call_result.parts[0].function_response.response
-                    function_result_parts.append(function_call_result.parts[0])
-                    if verbose:
-                        print(f"-> {function_call_result.parts[0].function_response.response}")
-                except Exception as e:
-                    print("Fatal error: function_result.parts[0].function_response.response attribute is missing.")
-                     
-    else:
-        response_text = "test-response"
-        prompt_token_count = 0
-        candidates_token_count = 0
+        if verbose:
+            print(
+                f"User prompt: {user_prompt}\n"
+                f"Prompt tokens: {prompt_token_count}\n"
+                f"Response tokens: {candidates_token_count}"
+            )
 
-    if verbose:
-        print(
-            f"User prompt: {user_prompt}\n"
-            f"Prompt tokens: {prompt_token_count}\n"
-            f"Response tokens: {candidates_token_count}"
-        )
+        try:
+            print(f"Agent Response: {response_text}")
 
-    print(response_text)
+            has_function_call = False
+            for candidate in response.candidates:
+                messages.append(candidate.content)
+                for part in candidate.content.parts:
+                    if part.function_call is not None:
+                        has_function_call = True
+                    #print(f"FUNCTION CALL: {part.function_call}")
+            messages.append(
+                types.Content(role="user", parts=function_result_parts),
+            )
+        except Exception as e:
+            print(f"Error: Could not append candidate to messages. Is response.candidates undefined? {e}")
+
+        #can potentially lead to fatal error if agent response failed to generate
+        if response_text and not has_function_call:
+            print(f"Agent finished after {i + 1} iterations.")
+            break
       
 def call_function(function_call_part, verbose=False):
     if verbose:
@@ -117,7 +139,6 @@ def call_function(function_call_part, verbose=False):
     }
 
     try:
-        #function_result = write_file(".", "hello.txt", "test")
         function_result = function_name[function_call_part.name](WORKING_DIRECTORY, **function_call_part.args)
         return types.Content(
             role="tool",
